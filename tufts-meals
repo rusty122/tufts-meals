@@ -45,6 +45,21 @@ while [ "$serverStatus" != "1" ]; do
     serverStatus=$(getStatus)
 done;
 
+# comments
+for arg in "$@"; do
+    case $arg in 
+        -l)
+            xdg-open "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&"
+            exit 0
+            ;;
+        *) 
+            echo "Unrecognized arg: $arg"
+            exit 1
+            ;;
+    esac
+done
+
+
 response=$(curl -s "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&")
 
 # parse out jumbocash balance
