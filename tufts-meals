@@ -1,50 +1,47 @@
-#!/usr/bin/env bash
-
+#!/bin/bash
 set -e
-
 if [ -z "$TUFTSID" ] || [ -z "$TUFTSPASS" ]; then
-        echo "TUFTSID and TUFTSPASS need to be set for this script. \
-if you are using bash, this can be done by adding the lines \
-'export TUFTSID=\"XXXXXXX\"' and 'export TUFTSPASS=\"XXXXXXX\"' \
-to your .bashrc file and then running 'source .bashrc'."
-        exit 1
-fi  
+    echo "TUFTSID and TUFTSPASS env variables need to be set for this script."
+    exit 1
+fi 
 
-# getStatus: function returns the server status to determine whether the final
-#       page is available or if there is an internal error. 0 indicates that
-#       the server is not ready, 1 indicates that it is, and -1 indicates an error. 
+# getStatus: returns the status of the server on retrieving user data.
+#            1 indicates server is ready 
+#            0 indicates server is not yet ready
+#            -1 indicates a server error (as far as I can tell)
 getStatus() {
+    # GET request returns xml doc with a single <message> tag
     val="$(curl -s https://www.jumbocash.net/login-check.php?skey=${skey})"
-    val=${val##*<message>}
+    val=${val##*<message>} # parse numerical value
     val=${val%%</message>*}
     echo $val
 }
 
-# x and y values are the coordinates clicked on 'submit' image
-data="cid=233&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}&x=48&y=4"
-text="$(
-    curl -s --data $data https://www.jumbocash.net/login.php | # post login data
-    grep login.php)" # search for response line which redirects
 
-# parse skey value from text
-skey=${text##*skey=}
-skey=${skey%%&cid*}
 
-# parse cid value from text
-cid=${text##*&cid=}
-cid=${cid%%&fullscreen=*}
 
-# not sure why it is necessary to GET this page
+echo "Retrieving data..."
+
+cid="233" # Hard-coded variable on website
+loginData="cid=${cid}&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}"
+
+# POST login data, then parse skey value from the html response.
+skey="$(
+    curl -s --data $loginData https://www.jumbocash.net/login.php |
+    grep login.php |
+    sed -r 's/.{38}//;s/.{30}$//')" # delete first 38 and last 30 characters
+
+# necessary to GET this page for some reason, delete output
 curl -s "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" > /dev/null
-serverStatus=$(getStatus)
 
+# Check every 2 seconds if the server is ready and fail on server error.
+# TODO: limit number of attempts.
+serverStatus=$(getStatus)
 while [ "$serverStatus" != "1" ]; do
-    #echo "status:" ${serverStatus}
-    #echo "server status != 1"
     if [ $serverStatus == "-1" ]; then
         exit 1
     fi
-    sleep 3 # pause for 3 seconds
+    sleep 2 # pause for 2 seconds
     serverStatus=$(getStatus)
 done;
 
@@ -60,5 +57,5 @@ plan=$(echo $response | grep "formtitle" | tail -1)
 plan=${plan##*<font class='formtitle'>}
 plan=${plan%%</font><br>*}
 
-echo $plan
-echo $balance
+# echo $plan
+echo "Your Jumbocash balance is: $balance"
