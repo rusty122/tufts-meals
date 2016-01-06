@@ -1,6 +1,8 @@
 # tufts-meals:  Meal Swipe and JumboCash balances easier
+
 Instead of trudging over to https://www.jumbocash.net, just check your 
 remaining meal swipes and JumboCash balance from the command line. 
+
 ## Getting started
 - Copy the script into `/usr/local/bin/` (and make sure that 
 `/usr/local/bin/` is included in `$PATH`).
