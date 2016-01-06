@@ -1,22 +1,21 @@
 #!/bin/bash
 set -e
+source ~/.bashrc # in case script is executed from a non-Bash shell
+
 if [ -z "$TUFTSID" ] || [ -z "$TUFTSPASS" ]; then
     echo "TUFTSID and TUFTSPASS env variables need to be set for this script."
     exit 1
 fi 
 
-# getStatus: returns the status of the server on retrieving user data.
-#            1 indicates server is ready 
-#            0 indicates server is not yet ready
-#            -1 indicates a server error (as far as I can tell)
+# getStatus: returns the server status on retrieving user data. Return codes:
+#            1: server is ready 
+#            0: server is not ready
+#            -1: server error (as far as I can tell)
 getStatus() {
     # GET request returns xml doc with a single <message> tag
-    val="$(curl -s https://www.jumbocash.net/login-check.php?skey=${skey})"
-    val=${val##*<message>} # parse numerical value
-    val=${val%%</message>*}
-    echo $val
+    curl -s https://www.jumbocash.net/login-check.php?skey=${skey} |
+    sed -n '2s/.*ge>\(.*\)<.*/\1/p'
 }
-
 
 
 
@@ -28,24 +27,25 @@ loginData="cid=${cid}&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}"
 # POST login data, then parse skey value from the html response.
 skey="$(
     curl -s --data $loginData https://www.jumbocash.net/login.php |
-    grep login.php |
-    sed -r 's/.{38}//;s/.{30}$//')" # delete first 38 and last 30 characters
+    sed -n '3s/.*skey=\([0-9a-z][0-9a-z]*\).*/\1/p')"
 
-# necessary to GET this page for some reason, delete output
-curl -s "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" > /dev/null
+# Necessary to GET this page for some reason. Script runs curl request 
+# asynchronously, and deletes output.
+curl -s "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" > /dev/null &
 
-# Check every 2 seconds if the server is ready and fail on server error.
+# Check every second if the server is ready. Fail on server error.
 # TODO: limit number of attempts.
 serverStatus=$(getStatus)
 while [ "$serverStatus" != "1" ]; do
-    if [ $serverStatus == "-1" ]; then
+    if [ "$serverStatus" == "-1" ]; then
+        >&2 echo "Server error."
         exit 1
     fi
-    sleep 2 # pause for 2 seconds
+    sleep 1 # pause for 1 second
     serverStatus=$(getStatus)
 done;
 
-# comments
+# Handle flag arguments
 for arg in "$@"; do
     case $arg in 
         -l) # open jumbocash.net page in browser already authenticated
@@ -63,7 +63,7 @@ for arg in "$@"; do
     esac
 done
 
-
+# retrieve 
 response=$(curl -s "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&")
 
 # parse out jumbocash balance
