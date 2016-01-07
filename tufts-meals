@@ -30,7 +30,7 @@ skey="$(
     sed -n '3s/.*skey=\([0-9a-z][0-9a-z]*\).*/\1/p')"
 
 # Necessary to GET this page for some reason. Script runs curl request 
-# asynchronously, and deletes output.
+# asynchronously, and ignores output.
 curl -s "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" > /dev/null &
 
 # Check every second if the server is ready. Fail on server error.
@@ -63,18 +63,21 @@ for arg in "$@"; do
     esac
 done
 
-# retrieve 
-response=$(curl -s "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&")
-
-# parse out jumbocash balance
-balance=$(echo $response | grep "Current Balance:")
-balance=${balance##*<b>Current Balance: }
-balance=${balance%%</b><br>*}
-
-# parse out meal plan
-plan=$(echo $response | grep "formtitle" | tail -1)
-plan=${plan##*<font class='formtitle'>}
-plan=${plan%%</font><br>*}
-
-# echo $plan
-echo "Your Jumbocash balance is: $balance"
+# Best solution I could find: retrieve final html page from server, then use 
+# tee to pipe the final page into two separate commands. Tee also passes on its
+# stdin to stdout, so this is just dumped to /dev/null. 
+# The first command outputs the user's JumboCash balance to stdout (but not
+# the same stdout instance as that of the tee command). 
+# The second command parses and outputs the number of the user's remaining
+#  mealswipes. 
+curl -s "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&" |
+tee >(sed -n 's/.*Balance: \([-0-9][0-9.]*\).*/Your Jumbocash balance is: \1./p') \
+>(grep 'tablecolnum' | tail -1 |
+sed -n 's/.*[^0-9]\([0-9][0-9]*\).*/You have \1 remaining meal swipes./p') >/dev/null
+# tee command hangs when output is redirected (http://tinyurl.com/j696tgg);
+# a short sleep call solves this
+sleep .01 
+# wait for the commands called from tee terminate, otherwise the command prompt
+# appears before all of the output finishes
+wait 
+exit 0
