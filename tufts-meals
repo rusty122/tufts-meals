@@ -7,77 +7,115 @@ if [ -z "$TUFTSID" ] || [ -z "$TUFTSPASS" ]; then
     exit 1
 fi 
 
-# getStatus: returns the server status on retrieving user data. Return codes:
-#            1: server is ready 
-#            0: server is not ready
-#            -1: server error (as far as I can tell)
-getStatus() {
-    # GET request returns xml doc with a single <message> tag
-    curl -s https://www.jumbocash.net/login-check.php?skey=${skey} |
-    sed -n '2s/.*ge>\(.*\)<.*/\1/p'
-}
 
 
+################################################################################
+#####                         LOGIN PROCESS                                #####
+################################################################################
+# This section handles the logic of loggging into the server so that the final
+# html documents can be accessed. The process is as follows: 
+#   1. POST login data to https://www.jumbocash.net/login.php and parse the 
+#      skey (session key?).
+#   2. GET intermediate "Please wait while we access your account." page.
+#      This is done in the background and output is redirected to /dev/null
+#      because there is no useful information on the page, but the login 
+#      process fails if it is skipped. 
+#   3. GET login-check.php page, parse out value of <message> tag which
+#      indicates whether or not the process is complete. Continue requesting
+#      the page every second until the response indicates that the login is
+#      complete. 
+# TODO: handle incorrect login credentials
 
 echo "Retrieving data..."
+
+##############################      PART 1      ################################
 
 cid="233" # Hard-coded variable on website
 loginData="cid=${cid}&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}"
 
-# POST login data, then parse skey value from the html response.
-skey="$(
-    curl -s --data $loginData https://www.jumbocash.net/login.php |
+skey="$(curl -s --data $loginData https://www.jumbocash.net/login.php |
     sed -n '3s/.*skey=\([0-9a-z][0-9a-z]*\).*/\1/p')"
 
-# Necessary to GET this page for some reason. Script runs curl request 
-# asynchronously, and ignores output.
-curl -s "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" > /dev/null &
 
-# Check every second if the server is ready. Fail on server error.
-# TODO: limit number of attempts.
+##############################      PART 2      ################################
+
+curl "https://www.jumbocash.net/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" \
+    > /dev/null &
+
+
+##############################      PART 3      ################################
+
+# getStatus: returns the server status on retrieving user data. Return codes:
+#            1: server is ready  -- user logged in
+#            0: server is not ready -- user not logged in
+#            -1: server error (as far as I can tell)
+getStatus() {
+    curl -s https://www.jumbocash.net/login-check.php?skey=${skey} |
+    sed -n '2s/.*ge>\(.*\)<.*/\1/p'
+}
+
 serverStatus=$(getStatus)
+
+# TODO: limit number of attempts.
 while [ "$serverStatus" != "1" ]; do
     if [ "$serverStatus" == "-1" ]; then
         >&2 echo "Server error."
         exit 1
     fi
-    sleep 1 # pause for 1 second
+    # must have returned 0; pause and try again
+    sleep 1 
     serverStatus=$(getStatus)
 done;
 
-# Handle flag arguments
+
+################################################################################
+#####                       COMMAND LINE ARGUMENTS                         #####
+################################################################################
+# Now that the user is logged in, handle any special flags. 
+# NOTE: xdg-open command does not seem to work on Halligan computers. 
+
 for arg in "$@"; do
     case $arg in 
         -l) # open jumbocash.net page in browser already authenticated
-            xdg-open "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&" &
-            exit 0
+            xdg-open "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&"
             ;;
         -d) # open jumbocash.net deposit page
-            xdg-open "https://www.jumbocash.net/payment.php?skey=${skey}&cid=${cid}&" &
-            exit 0
+            xdg-open "https://www.jumbocash.net/payment.php?skey=${skey}&cid=${cid}&"
             ;;
         *) 
             echo "Unrecognized arg: $arg"
-            exit 1
             ;;
     esac
 done
 
-# Best solution I could find: retrieve final html page from server, then use 
-# tee to pipe the final page into two separate commands. Tee also passes on its
-# stdin to stdout, so this is just dumped to /dev/null. 
-# The first command outputs the user's JumboCash balance to stdout (but not
-# the same stdout instance as that of the tee command). 
-# The second command parses and outputs the number of the user's remaining
-#  mealswipes. 
+
+################################################################################
+#####                          CORE DATA PARSING                           #####
+################################################################################
+# This section does the main data retrieval from the final html page. It's a
+# bit hacky partly because parsing in Bash is a bit hacky. Steps:
+#   1. Retrieve final html page from server.
+#   2. Use tee to pipe the final page into two separate commands. Tee also 
+#      passes on its stdin to stdout, so this is just dumped to /dev/null. 
+#   3. The first command outputs the user's JumboCash balance to stdout (but not
+#      the same stdout instance as that of the tee command?). 
+#   4. The second command takes the html page and parses and outputs the number
+#      of the user's remaining mealswipes. 
+#   5. CLEANUP: tee command hangs when output is redirected a short sleep call
+#      solves this. Also, since two commands are called in the background (or
+#      something along those lines) sometimes the command prompt appears before
+#      output finishes. Use wait command to fix this. 
+
+
+############################## PARTS 1, 2, 3, 4 ################################
+
 curl -s "https://www.jumbocash.net/index.php?skey=${skey}&cid=${cid}&" |
 tee >(sed -n 's/.*Balance: \([-0-9][0-9.]*\).*/Your Jumbocash balance is: \1./p') \
 >(grep 'tablecolnum' | tail -1 |
 sed -n 's/.*[^0-9]\([0-9][0-9]*\).*/You have \1 remaining meal swipes./p') >/dev/null
-# tee command hangs when output is redirected (http://tinyurl.com/j696tgg);
-# a short sleep call solves this
+
+##############################      PART 5      ################################
+
 sleep .01 
-# wait for the commands called from tee terminate, otherwise the command prompt
-# appears before all of the output finishes
 wait 
 exit 0
