@@ -27,7 +27,6 @@ readonly url="https://www.jumbocash.net"
 #      indicates whether or not the process is complete. Continue requesting
 #      the page after pausing for one second until the response indicates a
 #      successful login or 15 attempts have been made.
-# TODO: handle incorrect login credentials
 
 echo "Retrieving data..."
 
@@ -37,6 +36,11 @@ loginData="cid=${cid}&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}"
 
 skey="$(curl -s --data $loginData ${url}/login.php |
     sed -n '3s/.*skey=\([0-9a-z][0-9a-z]*\).*/\1/p')"
+
+if [ "$skey" == "" ]; then
+    >&2 echo "Failed to parse skey, likely due to invalid login credentials."
+    exit 1
+fi
 
 
 ##############################      PART 2      ################################
