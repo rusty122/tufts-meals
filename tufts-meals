@@ -25,8 +25,8 @@ readonly url="https://www.jumbocash.net"
 #      process fails if it is skipped.
 #   3. GET login-check.php page, parse out value of <message> tag which
 #      indicates whether or not the process is complete. Continue requesting
-#      the page every second until the response indicates that the login is
-#      complete.
+#      the page after pausing for one second until the response indicates a
+#      successful login or 15 attempts have been made.
 # TODO: handle incorrect login credentials
 
 echo "Retrieving data..."
@@ -57,14 +57,20 @@ getStatus() {
 
 serverStatus=$(getStatus)
 
-# TODO: limit number of attempts.
+counter=0
 while [ "$serverStatus" != "1" ]; do
     if [ "$serverStatus" == "-1" ]; then
         >&2 echo "Server error."
         exit 1
     fi
-    # not logged in yet -- pause and try again
-    sleep 1
+    counter=$((counter+1))
+    # arbitrary max attempts limit, not enforced by server
+    if [ "$counter" -ge 15 ]; then
+        >&2 echo "Checked login 15 times without success."
+        exit 1
+    fi
+
+    sleep 1 # not logged in yet -- pause and try again
     serverStatus=$(getStatus)
 done;
 
