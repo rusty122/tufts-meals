@@ -45,7 +45,8 @@ fi
 
 ##############################      PART 2      ################################
 
-curl "${url}/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" >/dev/null &
+curl -s "${url}/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" \
+    >/dev/null &
 
 
 ##############################      PART 3      ################################
