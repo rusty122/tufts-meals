@@ -1,49 +1,44 @@
-#!/usr/bin/env pythons
+#!/usr/bin/env python
 
 import requests
 import getpass
 import bs4
 import re
-
-cid = 233
-url = "https://www.jumbocash.net"
+import time
+import sys
 
 ################################################################################
 #####                         LOGIN PROCESS                                #####
 ################################################################################
-# This section handles the logic of loggging into the server so that the final
-# html documents can be accessed. The process is as follows:
 #   1. POST login data to https://www.jumbocash.net/login.php and parse the
-#      skey (session key?).
+#      skey (session key).
 #   2. GET intermediate "Please wait while we access your account." page.
-#      This is done in the background and output is redirected to /dev/null
-#      because there is no useful information on the page, but the login
-#      process fails if it is skipped.
+#      For some reason the login process fails if this is skipped.
 #   3. GET login-check.php page, parse out value of <message> tag which
 #      indicates whether or not the process is complete. Continue requesting
-#      the page after pausing for one second until the response indicates a
+#      the page after pausing for .3 seconds until the response indicates a
 #      successful login or 15 attempts have been made.
+#   4. GET final (index.php) page, parse JumboCash and meal swipe balances
 
 
 ##############################      PART 1      ################################
 
+CID     = 233
+URL     = "https://www.jumbocash.net"
 tuftsid = raw_input('Tufts ID #: ')
 pw      = getpass.getpass()
+
+data = {'cid': CID, 'save': 1, 'loginphrase' : tuftsid, 'password': pw}
+res  = requests.post(URL + "/login.php", data, allow_redirects=False)
+soup = bs4.BeautifulSoup(res.text, "html.parser")
 pattern = re.compile(r'skey=([0-9a-z]*)&')
-
-data = {'cid': cid, 'save': 1, 'loginphrase' : tuftsid, 'password': pw}
-res  = requests.post(url + "/login.php", data, allow_redirects=False)
-soup = bs4.BeautifulSoup(res.text)
 skey = re.search(pattern, soup.script.string).group(1)
-print skey
-
-"""
 
 
 ##############################      PART 2      ################################
 
-curl -s "${url}/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" \
-    >/dev/null &
+payload = {'skey': skey, 'cid': CID, 'fullscreen': 1, 'wason': None}
+requests.get(URL + "/login.php", params=payload)
 
 
 ##############################      PART 3      ################################
@@ -52,81 +47,28 @@ curl -s "${url}/login.php?skey=${skey}&cid=${cid}&fullscreen=1&wason=" \
 #            1: server is ready  -- user logged in
 #            0: server is not ready -- user not logged in
 #            -1: server error (as far as I can tell)
-getStatus() {
-    curl -s ${url}/login-check.php?skey=${skey} |
-    sed -n '2s/<message>\(\-\?[0-1]\).*/\1/p'
-}
+def getStatus():
+    res = requests.get(URL + "/login-check.php", params={'skey': skey})
+    soup = bs4.BeautifulSoup(res.text, "html.parser")
+    return int(soup.message.text)
 
-serverStatus=$(getStatus)
-
-counter=0
-while [ "$serverStatus" != "1" ]; do
-    if [ "$serverStatus" == "-1" ]; then
-        >&2 echo "Server error."
-        exit 1
-    fi
-    counter=$((counter+1))
-    # arbitrary max attempts limit, not enforced by server
-    if [ "$counter" -ge 15 ]; then
-        >&2 echo "Checked login 15 times without success."
-        exit 1
-    fi
-
-    sleep 1 # not logged in yet -- pause and try again
-    serverStatus=$(getStatus)
-done;
-
-################################################################################
-#####                       COMMAND LINE ARGUMENTS                         #####
-################################################################################
-# Now that the user is logged in, handle any special flags.
-# NOTE: xdg-open command does not seem to work on Halligan computers.
-
-for arg in "$@"; do
-    case $arg in
-        -l) # open jumbocash.net page in browser already authenticated
-            xdg-open "${url}/index.php?skey=${skey}&cid=${cid}&"
-            ;;
-        -d) # open jumbocash.net deposit page
-            xdg-open "${url}/payment.php?skey=${skey}&cid=${cid}&"
-            ;;
-        *)
-            >&2 echo "Unrecognized arg: $arg"
-            ;;
-    esac
-done
+serverStatus = 0
+counter = 0
+while serverStatus != 1:
+    serverStatus = getStatus()
+    if serverStatus == -1:
+        sys.stderr.write("Server error")
+        sys.exit()
+    counter += 1
+    if counter >= 15:
+        sys.stderr.write("Checked login 15 times without success.")
+        sys.exit()
+    time.sleep(.3)
 
 
-################################################################################
-#####                          CORE DATA PARSING                           #####
-################################################################################
-# This section does the main data retrieval from the final html page. It's a
-# bit hacky partly because parsing in Bash is a bit hacky. Steps:
-#   1. Retrieve final html page from server.
-#   2. Use tee to pipe the final page into two separate commands. Tee also
-#      passes on its stdin to stdout, so this is just dumped to /dev/null.
-#   3. The first command outputs the user's JumboCash balance to stdout (but not
-#      the same stdout instance as that of the tee command?).
-#   4. The second command takes the html page and parses and outputs the number
-#      of the user's remaining mealswipes.
-#   5. CLEANUP: tee command hangs when output is redirected a short sleep call
-#      solves this. Also, since two commands are called in the background (or
-#      something along those lines) sometimes the command prompt appears before
-#      output finishes. Use wait command to fix this.
+##############################      PART 4      ################################
 
-
-############################## PARTS 1, 2, 3, 4 ################################
-
-curl -s "${url}/index.php?skey=${skey}&cid=${cid}&" | tee \
->(sed -n 's/.*Balance: \([-0-9][0-9.]*\).*/Jumbocash balance: \1./p') \
->(grep 'tablecolnum' | tail -1 |
-sed -n 's/.*[^0-9]\([0-9][0-9]*\).*/Remaining meal swipes: \1./p') >/dev/null
-
-
-##############################      PART 5      ################################
-
-sleep .01
-wait
-
-exit 0
-"""
+res = requests.get(URL + '/index.php', params={'skey': skey, 'cid': CID})
+soup = bs4.BeautifulSoup(res.text, "html.parser")
+for result in soup.findAll('tfoot'):
+    print result.th.findNext().text
