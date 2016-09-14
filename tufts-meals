@@ -1,16 +1,12 @@
-#!/bin/bash
-set -e
-source ~/.bashrc # in case script is executed from a non-Bash shell
+#!/usr/bin/env pythons
 
-if [ -z "$TUFTSID" ] || [ -z "$TUFTSPASS" ]; then
-    >&2 echo "TUFTSID and TUFTSPASS env variables need to be set."
-    exit 1
-fi
+import requests
+import getpass
+import bs4
+import re
 
-# constants used in curl executions (cid is hard-coded on website)
-readonly cid="233"
-readonly url="https://www.jumbocash.net"
-
+cid = 233
+url = "https://www.jumbocash.net"
 
 ################################################################################
 #####                         LOGIN PROCESS                                #####
@@ -28,19 +24,20 @@ readonly url="https://www.jumbocash.net"
 #      the page after pausing for one second until the response indicates a
 #      successful login or 15 attempts have been made.
 
-echo "Retrieving data..."
 
 ##############################      PART 1      ################################
 
-loginData="cid=${cid}&save=1&loginphrase=${TUFTSID}&password=${TUFTSPASS}"
+tuftsid = raw_input('Tufts ID #: ')
+pw      = getpass.getpass()
+pattern = re.compile(r'skey=([0-9a-z]*)&')
 
-skey="$(curl -s --data $loginData ${url}/login.php |
-    sed -n '3s/.*skey=\([0-9a-z][0-9a-z]*\).*/\1/p')"
+data = {'cid': cid, 'save': 1, 'loginphrase' : tuftsid, 'password': pw}
+res  = requests.post(url + "/login.php", data, allow_redirects=False)
+soup = bs4.BeautifulSoup(res.text)
+skey = re.search(pattern, soup.script.string).group(1)
+print skey
 
-if [ "$skey" == "" ]; then
-    >&2 echo "Failed to parse skey, likely due to invalid login credentials."
-    exit 1
-fi
+"""
 
 
 ##############################      PART 2      ################################
@@ -132,3 +129,4 @@ sleep .01
 wait
 
 exit 0
+"""
