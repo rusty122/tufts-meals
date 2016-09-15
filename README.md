@@ -1,16 +1,15 @@
-# tufts-meals: Meal Swipe and JumboCash balances 
+# tufts-meals: meal swipe and JumboCash balances 
 Instead of trudging over to https://www.jumbocash.net, just check your 
 remaining meal swipes and JumboCash balance from the command line. 
 
-## Getting started
-- Copy the script into `/usr/local/bin/` (and make sure that 
-`/usr/local/bin/` is included in your `$PATH`).
-- The Bash script expects your Tufts ID and https://www.jumbocash.net 
-password as environment variables. The simplest way to do this is to add 
-the following lines to your .bashrc file: `export TUFTSID="XXXXXXX"` and 
-`export TUFTSPASS="XXXXXXX"`.
+## Requirements
+- You'll need BeautifulSoup4 and Requests, so go ahead and `pip install requirements.txt` to take care of that.
 
-## Features
-- `-l` flag opens a browser tab to https://www.jumbocash.net with your account 
-logged in
-- `-d` flag opens a browser tab where you can make a JumboCash deposit
+## Example
+The login process may take a few seconds (remember that weird loading page on the jumbocash.net site?). A typical dialog should look something like this (except maybe with less JumboCash):
+```
+Tufts ID #: XXXXXXX
+Password: 
+Remaining Swipes: 122
+JumboCash Balance: $1000000000.00
+```
