@@ -70,7 +70,14 @@ while serverStatus != 1:
 
 res = requests.get(URL + '/index.php', params={'skey': skey, 'cid': CID})
 soup = bs4.BeautifulSoup(res.text, "html.parser")
-jumbocash, swipes = map(lambda t: t.th.findNext().text, soup.findAll('tfoot'))
+jumbocashStats = map(lambda t: t.th.findNext().text, soup.findAll('tfoot'))
+
+if len(jumbocashStats) == 1: # Only Jumbocash available 
+    swipes = "No Meal Plan"
+    jumbocash = jumbocashStats[0]
+else:
+    swipes = jumbocashStats[0]
+    jumbocash = jumbocash[1]
 
 print 'Remaining Swipes: {}'.format(swipes)
 print 'JumboCash Balance: ${}'.format(jumbocash)
