@@ -6,6 +6,7 @@ import bs4
 import re
 import time
 import sys
+import argparse
 
 ################################################################################
 #####                         LOGIN PROCESS                                #####
@@ -19,6 +20,13 @@ import sys
 #      the page after pausing for .3 seconds until the response indicates a
 #      successful login or 15 attempts have been made.
 #   4. GET final (index.php) page, parse JumboCash and meal swipe balances.
+
+
+parser = argparse.ArgumentParser(description='Scrape meal and cash balances.')
+parser.add_argument('-l', dest='list_history', action='store_true', 
+    help="list recent JumboCash history")
+parser.set_defaults(list_history=False)
+args = parser.parse_args()
 
 
 ##############################      PART 1      ################################
@@ -76,8 +84,11 @@ if len(jumbocashStats) == 1: # Only Jumbocash available
     swipes = "No Meal Plan"
     jumbocash = jumbocashStats[0]
 else:
-    swipes = jumbocashStats[0]
-    jumbocash = jumbocash[1]
+    jumbocash = jumbocashStats[0]
+    swipes    = jumbocashStats[1]
+
+if args.list_history:
+    print "TODO: print out recent jumbocash history"
 
 print 'Remaining Swipes: {}'.format(swipes)
 print 'JumboCash Balance: ${}'.format(jumbocash)
