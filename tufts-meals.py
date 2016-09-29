@@ -81,14 +81,16 @@ soup = bs4.BeautifulSoup(res.text, "html.parser")
 jumbocashStats = map(lambda t: t.th.findNext().text, soup.findAll('tfoot'))
 
 if len(jumbocashStats) == 1: # Only Jumbocash available 
-    swipes = "No Meal Plan"
     jumbocash = jumbocashStats[0]
+    swipes    = 0
 else:
     jumbocash = jumbocashStats[0]
     swipes    = jumbocashStats[1]
 
 if args.list_history:
-    print "TODO: print out recent jumbocash history"
+    for row in soup.table.findAll('tr')[1:-1]:
+        date, location, charge = (td.text for td in row.findAll('td')[:-1])
+        print date, location, charge
 
-print 'Remaining Swipes: {}'.format(swipes)
 print 'JumboCash Balance: ${}'.format(jumbocash)
+print 'Remaining Swipes: {}'.format(swipes)
